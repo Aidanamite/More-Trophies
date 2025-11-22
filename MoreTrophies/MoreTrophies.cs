@@ -517,6 +517,7 @@ namespace MoreTrophies
                     small.SetLayerRecursivly(0);
                     small.SetActive(false);
                     small.GetComponentInChildren<Canvas>(true).renderMode = RenderMode.WorldSpace;
+                    small.gameObject.AddComponent<BlueprintTrophy>();
                     small.transform.localPosition = new Vector3(0.03f, 0, 0.07f);
                     small.transform.localRotation = Quaternion.identity;
                     small.transform.localScale = Vector3.one * 1.5f;
@@ -927,6 +928,32 @@ namespace MoreTrophies
                 return memory && obj.model == memory;
             memory = obj.model;
             return original;
+        }
+    }
+
+    [HarmonyPatch(typeof(TrophyHolder),"OnIsRayed")] // TODO: TEST THIS THING!
+    public class Patch_BoardRayed
+    {
+        static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
+        {
+            var code = instructions.ToList();
+            code.InsertRange(code.FindIndex(x => x.operand is MethodInfo m && m.Name == "DoesAcceptItem") + 1, new[]
+            {
+                new CodeInstruction(OpCodes.Ldarg_0),
+                new CodeInstruction(OpCodes.Ldflda, AccessTools.Field(typeof(TrophyHolder), "isShowingText")),
+                new CodeInstruction(OpCodes.Ldloc_0),
+                new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(Patch_BoardRayed),nameof(OverrideAcceptsItem)))
+            });
+            return code;
+        }
+
+        static bool OverrideAcceptsItem(bool original,ref bool isShowingText,Slot selectedSlot)
+        {
+            if (!original || selectedSlot.itemInstance.HasMaxUses)
+                return original;
+            ComponentManager<CanvasHelper>.Value.displayTextManager.ShowText("Cannot place damaged item", 0, true, 0);
+            isShowingText = true;
+            return false;
         }
     }
 
