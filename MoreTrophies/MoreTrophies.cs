@@ -167,8 +167,8 @@ namespace MoreTrophies
                 var obj = Resources.FindObjectsOfTypeAll<Brick_Wet>().LastOrDefault();
                 if (!obj)
                     return default;
-                var go = Traverse.Create(obj).Field("filter").GetValue<MeshFilter>().gameObject;
-                return (go,Traverse.Create(obj).Field("dryMesh").GetValue<Mesh>(),go.GetComponent<MeshRenderer>().sharedMaterials);
+                var go = obj.filter.gameObject;
+                return (go,obj.dryMesh,go.GetComponent<MeshRenderer>().sharedMaterials);
             }), new Vector3(-0.01f, -0.02f, -0.04f), new Vector3(90, 0, 0) ),
             new Trophy(ItemManager.GetItemByName("Feather"), FindModel.ByRendererName("model_feather"), new Vector3(0, 0, -0.01f), new Vector3(0, 0, 20) ),
             new Trophy(ItemManager.GetItemByName("BioFuel"), FindModel.ByRendererName("BioFuel"), new Vector3(0, 0, 0.03f), new Vector3(0, 0, 0), 0.5f ),
@@ -346,8 +346,7 @@ namespace MoreTrophies
             harmony?.UnpatchAll(harmony.Id);
             foreach (ItemObjectEnabler enabler in Resources.FindObjectsOfTypeAll<ItemObjectEnabler>())
             {
-                var enablerConnections = Traverse.Create(enabler).Field<ItemModelConnection[]>("itemConnections");
-                var connections = enablerConnections.Value.ToList();
+                var connections = enabler.itemConnections.ToList();
                 var changed = false;
                 for (int i = connections.Count - 1; i >= 0; i--)
                     if (connections[i] is CustomModelConnection)
@@ -357,7 +356,7 @@ namespace MoreTrophies
                         connections.RemoveAt(i);
                     }
                 if (changed)
-                    enablerConnections.Value = connections.ToArray();
+                    enabler.itemConnections = connections.ToArray();
             }
             while (ItemsToAdd.RemoveAll(x => x.GeneratePrefab == null && x.Source == null && !(x.Linked != null && ItemsToAdd.Contains(x.Linked))) > 0) ;
             Destroy(PrefabParent.gameObject);
@@ -367,10 +366,9 @@ namespace MoreTrophies
         public static void ModifyBoard(TrophyHolder holder)
         {
             EnsureBlueprints();
-            var enabler = Traverse.Create(holder).Field("itemObjectEnabler").GetValue<ItemObjectEnabler>();
+            var enabler = holder.itemObjectEnabler;
             var size = Trophy.GetSize(enabler);
-            var enablerConnections = Traverse.Create(enabler).Field<ItemModelConnection[]>("itemConnections");
-            var connections = enablerConnections.Value.ToList();
+            var connections = enabler.itemConnections.ToList();
             var linkedLookup = new Dictionary<Trophy, GameObject>();
             var contains = new HashSet<string>();
             var held = holder.GetCurrentItem()?.UniqueIndex ?? -1;
@@ -470,7 +468,7 @@ namespace MoreTrophies
                     MaybeAddTrophy(trophy);
                 }
             }
-            enablerConnections.Value = connections.ToArray();
+            enabler.itemConnections = connections.ToArray();
         }
 
         public static Vector3 Vector3Multiply(Vector3 a, Vector3 b) => new Vector3(a.x * b.x, a.y * b.y, a.z * b.z);
@@ -940,19 +938,18 @@ namespace MoreTrophies
             code.InsertRange(code.FindIndex(x => x.operand is MethodInfo m && m.Name == "DoesAcceptItem") + 1, new[]
             {
                 new CodeInstruction(OpCodes.Ldarg_0),
-                new CodeInstruction(OpCodes.Ldflda, AccessTools.Field(typeof(TrophyHolder), "isShowingText")),
-                new CodeInstruction(OpCodes.Ldloc_0),
+                new CodeInstruction(OpCodes.Ldloc_1),
                 new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(Patch_BoardRayed),nameof(OverrideAcceptsItem)))
             });
             return code;
         }
 
-        static bool OverrideAcceptsItem(bool original,ref bool isShowingText,Slot selectedSlot)
+        static bool OverrideAcceptsItem(bool original, TrophyHolder holder, Slot selectedSlot)
         {
             if (!original || selectedSlot.itemInstance.HasMaxUses)
                 return original;
             ComponentManager<CanvasHelper>.Value.displayTextManager.ShowText("Cannot place damaged item", 0, true, 0);
-            isShowingText = true;
+            holder.isShowingText = true;
             return false;
         }
     }
@@ -962,18 +959,6 @@ namespace MoreTrophies
 
     public static class ExtentionMethods
     {
-        static FieldInfo _nameText = AccessTools.Field(typeof(BlueprintComponent), "nameText");
-        static FieldInfo _descText = AccessTools.Field(typeof(BlueprintComponent), "descText");
-        static FieldInfo _blueprintImage = AccessTools.Field(typeof(BlueprintComponent), "blueprintImage");
-        static FieldInfo _blueprintConnections = AccessTools.Field(typeof(BlueprintComponent), "blueprintConnections");
-        public static void SetNameText(this BlueprintComponent component, TextMeshProUGUI text) => _nameText.SetValue(component, text);
-        public static TextMeshProUGUI GetNameText(this BlueprintComponent component) => (TextMeshProUGUI)_nameText.GetValue(component);
-        public static void SetDescText(this BlueprintComponent component, TextMeshProUGUI text) => _descText.SetValue(component, text);
-        public static TextMeshProUGUI GetDescText(this BlueprintComponent component) => (TextMeshProUGUI)_descText.GetValue(component);
-        public static void SetBlueprintImage(this BlueprintComponent component, Image image) => _blueprintImage.SetValue(component, image);
-        public static Image GetBlueprintImage(this BlueprintComponent component) => (Image)_blueprintImage.GetValue(component);
-        public static void SetBlueprintConnections(this BlueprintComponent component, List<BlueprintConnection> connections) => _blueprintConnections.SetValue(component, connections);
-        public static List<BlueprintConnection> GetBlueprintConnections(this BlueprintComponent component) => (List<BlueprintConnection>)_blueprintConnections.GetValue(component);
 
         public static T GetAnyComponentInParent<T>(this Component component) where T : Component
         {
